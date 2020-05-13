@@ -27,9 +27,7 @@ import (
 
 	gcli "github.com/heketi/heketi/client/api/go-client"
 	gapi "github.com/heketi/heketi/pkg/glusterfs/api"
-	"github.com/kubernetes-sigs/sig-storage-lib-external-provisioner/controller"
-	"github.com/kubernetes-sigs/sig-storage-lib-external-provisioner/util"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/uuid"
@@ -38,6 +36,8 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog"
+	"sigs.k8s.io/sig-storage-lib-external-provisioner/controller"
+	"sigs.k8s.io/sig-storage-lib-external-provisioner/util"
 )
 
 const (
@@ -66,7 +66,8 @@ type glusterBlockProvisioner struct {
 	// provisioner's PVs.
 	identity string
 
-	options controller.VolumeOptions
+	//options controller.VolumeOptions
+	options controller.ProvisionOptions
 }
 
 type provisionerConfig struct {
@@ -164,7 +165,7 @@ func (p *glusterBlockProvisioner) GetAccessModes() []v1.PersistentVolumeAccessMo
 }
 
 // Provision creates a storage asset and returns a PV object representing it.
-func (p *glusterBlockProvisioner) Provision(options controller.VolumeOptions) (*v1.PersistentVolume, error) {
+func (p *glusterBlockProvisioner) Provision(options controller.ProvisionOptions) (*v1.PersistentVolume, error) {
 
 	var err error
 	if options.PVC.Spec.Selector != nil {
@@ -177,7 +178,7 @@ func (p *glusterBlockProvisioner) Provision(options controller.VolumeOptions) (*
 
 	klog.V(4).Infof("VolumeOptions %v", options)
 
-	cfg, parseErr := parseClassParameters(options.Parameters, p.client)
+	cfg, parseErr := parseClassParameters(options.StorageClass.Parameters, p.client)
 	if parseErr != nil {
 		return nil, fmt.Errorf("failed to parse storage class parameters: %v", parseErr)
 	}
@@ -276,7 +277,7 @@ func (p *glusterBlockProvisioner) Provision(options controller.VolumeOptions) (*
 		},
 		Spec: v1.PersistentVolumeSpec{
 			VolumeMode:                    volMode,
-			PersistentVolumeReclaimPolicy: options.PersistentVolumeReclaimPolicy,
+			PersistentVolumeReclaimPolicy: *options.StorageClass.ReclaimPolicy,
 			AccessModes:                   options.PVC.Spec.AccessModes,
 			Capacity: v1.ResourceList{
 				v1.ResourceName(v1.ResourceStorage): options.PVC.Spec.Resources.Requests[v1.ResourceName(v1.ResourceStorage)],
@@ -846,7 +847,7 @@ func GetSecretForPV(restSecretNamespace, restSecretName, volumePluginName string
 	if kubeClient == nil {
 		return secret, fmt.Errorf("cannot get kube client")
 	}
-	secrets, err := kubeClient.Core().Secrets(restSecretNamespace).Get(restSecretName, metav1.GetOptions{})
+	secrets, err := kubeClient.CoreV1().Secrets(restSecretNamespace).Get(restSecretName, metav1.GetOptions{})
 	if err != nil {
 		return secret, err
 	}
